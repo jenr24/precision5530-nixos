@@ -125,7 +125,6 @@ in
     zoom-us
     gnome.gnome-tweaks
     gnomeExtensions.openweather
-    gnomeExtensions.dash-to-dock
     gnomeExtensions.user-themes
   ];
 
