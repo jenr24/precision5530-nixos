@@ -4,6 +4,7 @@
 
 { config, pkgs, ... }:
 let
+  # Command to run a program with the Nvidia GPU
   nvidia-offload = pkgs.writeShellScriptBin "nvidia-offload" ''
     export __NV_PRIME_RENDER_OFFLOAD=1
     export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
@@ -17,27 +18,47 @@ in
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
     ];
-    
+
+  # Allow Propietary Software
   nixpkgs.config.allowUnfree = true;
-  nix = {
-    package = pkgs.nixUnstable;
-    extraOptions = ''
-      experimental-features = nix-command flakes
-    '';
-  };
+
   # Use the systemd-boot EFI boot loader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  boot.cleanTmpDir = true;
   boot.loader.grub = {
     enable = true;
     version = 2;
-    device = "nodev";
+    devices = ["nodev"];
     efiSupport = true;
+    splashMode = "stretch";
     enableCryptodisk = true;
+    extraEntries = ''
+    menuentry "Reboot" {
+      reboot
+    }
+    menuentry "Poweroff" {
+      halt
+    }
+    '';
   };
 
+  # Enable Bluetooth Headsets
+  hardware.pulseaudio.package = pkgs.pulseaudioFull; # support for bluetooth headsets
+  hardware.bluetooth.enable = true;
+
+  hardware.nvidia = {
+    modesetting.enable = true;
+    prime = {
+      offload.enable = true;
+      intelBusId = "PCI:0:2:0";
+      nvidiaBusId = "PCI:1:0:0";
+    };
+  };
+
+  # Enable Networking
   networking.hostName = "prec5530-nixos"; # Define your hostname.
-  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
+  networking.networkmanager.enable = true;
 
   # Set your time zone.
   time.timeZone = "America/Chicago";
@@ -47,10 +68,6 @@ in
   # replicates the default behaviour.
   networking.useDHCP = false;
   networking.interfaces.wlp59s0.useDHCP = true;
-
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
 
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
@@ -62,21 +79,20 @@ in
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
-
   # Enable the GNOME Desktop Environment.
   services.xserver.displayManager.gdm.enable = true;
   services.xserver.desktopManager.gnome.enable = true;
   services.xserver.videoDrivers = [ "modesetting" "nvidia" ];
-  
-  hardware.nvidia.prime = {
-    offload.enable = true;
-    intelBusId = "PCI:0:2:0";
-    nvidiaBusId = "PCI:1:0:0";
-  };
+  services.xserver.displayManager.gdm.nvidiaWayland = true;
+
+  services.xserver.desktopManager.gnome.extraGSettingsOverrides = ''
+      # Change default background
+      [org.gnome.desktop.background]
+      picture-uri='https://w.wallhaven.cc/full/od/wallhaven-odp737.jpg'
+    '';
 
   # Configure keymap in X11
-  # services.xserver.layout = "us";
-  # services.xserver.xkbOptions = "eurosign:e";
+  services.xserver.layout = "us";
 
   # Enable CUPS to print documents.
   services.printing.enable = true;
@@ -92,11 +108,10 @@ in
     (nerdfonts.override { fonts = [ "FiraCode" "DroidSansMono" ]; })
   ];
 
-  # Define a user account. Don't forget to set a password with ‘passwd’.
   users.users.jenr = {
     isNormalUser = true;
     description = "Jen Reiss";
-    extraGroups = [ "wheel" "networkmanager" ]; # Enable ‘sudo’ for the user.
+    extraGroups = [ "wheel" "networkmanager" ];
     hashedPassword = "$6$0cBK71aGreCGziV$9xEyPp4JkPE/Lsfo7GoRWSYL2TnRU3d8nQyVDObAkSpJI4nnjeIoLZaAq1IXjMGv/aHGLabcx1wDnja97cV4N/";
   };
 
@@ -119,22 +134,20 @@ in
     gnumake
     curl
     git
+    gcc
+    gnumake
+    gparted
+    gimp
     tree
     nvidia-offload
     rpi-imager
     zoom-us
+    starship
+    pciutils
     gnome.gnome-tweaks
     gnomeExtensions.openweather
     gnomeExtensions.user-themes
   ];
-
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  # programs.gnupg.agent = {
-  #   enable = true;
-  #   enableSSHSupport = true;
-  # };
 
   # List services that you want to enable:
 
