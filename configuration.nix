@@ -6,11 +6,17 @@
 let
   # Command to run a program with the Nvidia GPU
   nvidia-offload = pkgs.writeShellScriptBin "nvidia-offload" ''
+    export MESA_GL_VERSION_OVERRIDE=4.3
     export __NV_PRIME_RENDER_OFFLOAD=1
     export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
     export __GLX_VENDOR_LIBRARY_NAME=nvidia
     export __VK_LAYER_NV_optimus=NVIDIA_only
     exec -a "$0" "$@"
+  '';
+
+  # Command to edit this system configuration in VSCode
+  edit-configuration = pkgs.writeShellScriptBin "edit-configuration" ''
+    code /etc/nixos --user-data-dir
   '';
 in
 {
@@ -18,6 +24,17 @@ in
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
     ];
+
+  # Allow Automatic Upgrades
+  system.autoUpgrade.enable = true;
+  system.autoUpgrade.allowReboot = true;
+  system.autoUpgrade.channel = https://nixos.org/channels/nixos-21.05;
+
+  # Enable Garbage Collection every day at 8am
+  nix.gc = {
+    automatic = true;
+    dates = "08:00";
+  };
 
   # Allow Propietary Software
   nixpkgs.config.allowUnfree = true;
@@ -31,7 +48,10 @@ in
     version = 2;
     devices = ["nodev"];
     efiSupport = true;
-    splashMode = "stretch";
+    fontSize = 16;
+    gfxmodeEfi = "1024x768";
+    theme = pkgs.nixos-grub2-theme;
+    splashMode = "normal";
     enableCryptodisk = true;
     extraEntries = ''
     menuentry "Reboot" {
@@ -47,12 +67,14 @@ in
   hardware.pulseaudio.package = pkgs.pulseaudioFull; # support for bluetooth headsets
   hardware.bluetooth.enable = true;
 
+  # Enable the proprietary Nvidia driver
+  services.xserver.videoDrivers = [ "nvidia" ];
   hardware.nvidia = {
     modesetting.enable = true;
     prime = {
       offload.enable = true;
-      intelBusId = "PCI:0:2:0";
       nvidiaBusId = "PCI:1:0:0";
+      intelBusId = "PCI:0:2:0";
     };
   };
 
@@ -60,7 +82,7 @@ in
   networking.hostName = "prec5530-nixos"; # Define your hostname.
   networking.networkmanager.enable = true;
 
-  # Set your time zone.
+  # Set the time zone.
   time.timeZone = "America/Chicago";
 
   # The global useDHCP flag is deprecated, therefore explicitly set to false here.
@@ -79,17 +101,25 @@ in
   # Enable the X11 windowing system.
   services.xserver.enable = true;
 
-  # Enable the GNOME Desktop Environment.
-  services.xserver.displayManager.gdm.enable = true;
-  services.xserver.desktopManager.gnome.enable = true;
-  services.xserver.videoDrivers = [ "modesetting" "nvidia" ];
-  services.xserver.displayManager.gdm.nvidiaWayland = true;
+  # Use the Gnome Display Manager with Wayland
+  services.xserver.displayManager.gdm = {
+    enable = true;
+    nvidiaWayland = true;
+  };
 
-  services.xserver.desktopManager.gnome.extraGSettingsOverrides = ''
+  # Enable the GNOME Desktop Environment.
+  services.xserver.desktopManager.gnome = {
+    enable = true;
+    extraGSettingsOverrides = ''
       # Change default background
       [org.gnome.desktop.background]
       picture-uri='https://w.wallhaven.cc/full/od/wallhaven-odp737.jpg'
     '';
+    extraGSettingsOverridePackages = [
+      pkgs.gsettings-desktop-schemas # for org.gnome.desktop
+      pkgs.gnome.gnome-shell # for org.gnome.shell
+    ];
+  };
 
   # Configure keymap in X11
   services.xserver.layout = "us";
@@ -104,10 +134,12 @@ in
   # Enable touchpad support (enabled default in most desktopManager).
   services.xserver.libinput.enable = true;
 
+  # Install extra fonts
   fonts.fonts = with pkgs; [
     (nerdfonts.override { fonts = [ "FiraCode" "DroidSansMono" ]; })
   ];
 
+  # Add my user
   users.users.jenr = {
     isNormalUser = true;
     description = "Jen Reiss";
@@ -140,6 +172,7 @@ in
     gimp
     tree
     nvidia-offload
+    edit-configuration
     rpi-imager
     zoom-us
     starship
@@ -147,6 +180,10 @@ in
     gnome.gnome-tweaks
     gnomeExtensions.openweather
     gnomeExtensions.user-themes
+    xorg.libXxf86vm
+    orchis
+    moka-icon-theme
+    capitaine-cursors
   ];
 
   # List services that you want to enable:
@@ -167,6 +204,5 @@ in
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
   system.stateVersion = "21.05"; # Did you read the comment?
-
 }
 
