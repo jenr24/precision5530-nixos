@@ -14,8 +14,8 @@ let
     exec -a "$0" "$@"
   '';
 
-  # Command to edit this system configuration in VSCode
-  edit-configuration = pkgs.writeShellScriptBin "edit-configuration" ''
+  # Command to edit this system configuration in VSCode as root
+  edit-system-configuration = pkgs.writeShellScriptBin "edit-system-configuration" ''
     code /etc/nixos --user-data-dir
   '';
 in
@@ -26,70 +26,182 @@ in
     ];
 
   # Allow Automatic Upgrades
-  system.autoUpgrade.enable = true;
-  system.autoUpgrade.allowReboot = true;
-  system.autoUpgrade.channel = https://nixos.org/channels/nixos-21.05;
+  system.autoUpgrade = {
+    enable = true;
+    allowReboot = true;
+    # channel = https://nixos.org/channels/nixos-unstable; # Use the unstable channel
+    channel = https://nixos.org/channels/nixos-21.05; # Use the stable channel
+  };
 
-  # Enable Garbage Collection every day at 8am
-  nix.gc = {
-    automatic = true;
-    dates = "08:00";
+  # Configure the package manager
+  nix = {
+    # Enable Garbage Collection every day at 8am
+    gc = {
+      automatic = true;
+      dates = "08:00";
+    };
+
+    # Enable a binary cache
+    binaryCachePublicKeys = [
+      "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
+    ];
+
+    binaryCaches = [
+      "https://hydra.iohk.io"
+    ];
   };
 
   # Allow Propietary Software
   nixpkgs.config.allowUnfree = true;
 
-  # Use the systemd-boot EFI boot loader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
-  boot.cleanTmpDir = true;
-  boot.loader.grub = {
-    enable = true;
-    version = 2;
-    devices = ["nodev"];
-    efiSupport = true;
-    fontSize = 16;
-    gfxmodeEfi = "1024x768";
-    theme = pkgs.nixos-grub2-theme;
-    splashMode = "normal";
-    enableCryptodisk = true;
-    extraEntries = ''
-    menuentry "Reboot" {
-      reboot
-    }
-    menuentry "Poweroff" {
-      halt
-    }
-    '';
-  };
+  # Additional hardware configuration
+  hardware = {
+    # Enable sound
+    pulseaudio.enable = true;
 
-  # Enable Bluetooth Headsets
-  hardware.pulseaudio.package = pkgs.pulseaudioFull; # support for bluetooth headsets
-  hardware.bluetooth.enable = true;
+    # Enable Bluetooth Headsets
+    pulseaudio.package = pkgs.pulseaudioFull; # support for bluetooth headsets
+    bluetooth.enable = true;
 
-  # Enable the proprietary Nvidia driver
-  services.xserver.videoDrivers = [ "nvidia" ];
-  hardware.nvidia = {
-    modesetting.enable = true;
-    prime = {
-      offload.enable = true;
-      nvidiaBusId = "PCI:1:0:0";
-      intelBusId = "PCI:0:2:0";
+    # Enable OpenGL
+    opengl = {
+      enable = true;
+      driSupport = true;
+      extraPackages = with pkgs; [
+        intel-media-driver
+        vaapiIntel
+        vaapiVdpau
+        libvdpau-va-gl
+      ];
+    };
+
+    # Enable the Nvidia graphics card
+    nvidia = {
+      modesetting.enable = true;
+      nvidiaPersistenced = true;
+
+      powerManagement = {
+        enable = true;
+        finegrained = true;
+      };
+
+      prime = {
+        offload.enable = true;
+        nvidiaBusId = "PCI:1:0:0";
+        intelBusId = "PCI:0:2:0";
+      };
     };
   };
 
+  # Configure the boot process
+  boot = {
+    # Clean /tmp each boot
+    cleanTmpDir = true;
+
+    # Configure the bootloader
+    loader = {
+      # Use the systemd-boot EFI boot loader.
+      systemd-boot.enable = true;
+
+      # Allow the bootloader to use EFI
+      efi.canTouchEfiVariables = true;
+
+      # Configure GRUB
+      grub = {
+        enable = true;
+        version = 2;
+        devices = ["nodev"];
+        efiSupport = true;
+        fontSize = 16;
+
+        # Use a scaled down resolution
+        gfxmodeEfi = "1024x768";
+
+        # Use the nix theme
+        theme = pkgs.nixos-grub2-theme;
+        splashMode = "normal";
+
+        # Enable encrypted disks
+        enableCryptodisk = true;
+
+        extraEntries = ''
+        menuentry "Reboot" {
+          reboot
+        }
+        menuentry "Poweroff" {
+          halt
+        }
+        '';
+      };
+    };
+  };
+
+  # Enable the X11 windowing system.
+  services.xserver = {
+    enable = true;
+
+    # Configure keymap 
+    layout = "us";
+
+    # Enable touchpad support
+    libinput.enable = true;
+
+    # Enable the proprietary Nvidia driver
+    videoDrivers = [ "nvidia" ];
+
+    # Use the Gnome Display Manager
+    displayManager.gdm = {
+      enable = true;
+      wayland = true;
+
+      # Use the Nvidia card with GDM
+      nvidiaWayland = true;
+
+      # Automatically suspend when inactive
+      autoSuspend = true;
+    };
+
+    # Enable the GNOME Desktop Environment.
+    desktopManager.gnome = {
+      enable = true;
+
+      # Override Gnome Default Settings
+      extraGSettingsOverrides = ''
+        # Change default background
+        [org.gnome.desktop.background]
+        picture-uri='https://w.wallhaven.cc/full/od/wallhaven-odp737.jpg'
+
+        [org.gnome.desktop.interface]
+        # Use a 12 hour clock
+        clock-format='12h'
+    
+        # Set the default theme
+        gtk-theme='Orchis-purple-dark'
+        icon-theme='Moka'
+        cursor-theme='capitaine-cursors'
+
+
+      '';
+      extraGSettingsOverridePackages = [ pkgs.gsettings-desktop-schemas ];
+    };
+  };
+
+  programs.fish.enable = true;
+
   # Enable Networking
-  networking.hostName = "prec5530-nixos"; # Define your hostname.
-  networking.networkmanager.enable = true;
+  networking = {
+    hostName = "prec5530-nixos";
+    networkmanager.enable = true;
+
+    # The global useDHCP flag is deprecated, therefore explicitly set to false here.
+    # Per-interface useDHCP will be mandatory in the future, so this generated config
+    # replicates the default behaviour.
+    useDHCP = false;
+    interfaces.wlp59s0.useDHCP = true;
+  };
 
   # Set the time zone.
   time.timeZone = "America/Chicago";
-
-  # The global useDHCP flag is deprecated, therefore explicitly set to false here.
-  # Per-interface useDHCP will be mandatory in the future, so this generated config
-  # replicates the default behaviour.
-  networking.useDHCP = false;
-  networking.interfaces.wlp59s0.useDHCP = true;
 
   # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
@@ -98,41 +210,11 @@ in
     keyMap = "us";
   };
 
-  # Enable the X11 windowing system.
-  services.xserver.enable = true;
-
-  # Use the Gnome Display Manager with Wayland
-  services.xserver.displayManager.gdm = {
-    enable = true;
-    nvidiaWayland = true;
-  };
-
-  # Enable the GNOME Desktop Environment.
-  services.xserver.desktopManager.gnome = {
-    enable = true;
-    extraGSettingsOverrides = ''
-      # Change default background
-      [org.gnome.desktop.background]
-      picture-uri='https://w.wallhaven.cc/full/od/wallhaven-odp737.jpg'
-    '';
-    extraGSettingsOverridePackages = [
-      pkgs.gsettings-desktop-schemas # for org.gnome.desktop
-      pkgs.gnome.gnome-shell # for org.gnome.shell
-    ];
-  };
-
-  # Configure keymap in X11
-  services.xserver.layout = "us";
-
   # Enable CUPS to print documents.
   services.printing.enable = true;
 
   # Enable sound.
   sound.enable = true;
-  hardware.pulseaudio.enable = true;
-
-  # Enable touchpad support (enabled default in most desktopManager).
-  services.xserver.libinput.enable = true;
 
   # Install extra fonts
   fonts.fonts = with pkgs; [
@@ -143,47 +225,29 @@ in
   users.users.jenr = {
     isNormalUser = true;
     description = "Jen Reiss";
+    shell = pkgs.fish;
     extraGroups = [ "wheel" "networkmanager" ];
     hashedPassword = "$6$0cBK71aGreCGziV$9xEyPp4JkPE/Lsfo7GoRWSYL2TnRU3d8nQyVDObAkSpJI4nnjeIoLZaAq1IXjMGv/aHGLabcx1wDnja97cV4N/";
   };
 
-  nix.binaryCachePublicKeys = [
-    "hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ="
-  ];
-
-  nix.binaryCaches = [
-    "https://hydra.iohk.io"
-  ];
-
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    google-chrome
-    spotify
-    vscode
-    htop
-    autoconf
-    gnumake
-    curl
-    git
-    gcc
-    gnumake
-    gparted
-    gimp
-    tree
+    # User Applications
+    google-chrome spotify gimp gparted zoom-us rpi-imager
+    # System Utilities
+    htop curl tree edit-system-configuration pciutils
+    # Programming Tools
+    vscode autoconf gnumake git gcc
+    # Shells
+    fish starship
+    # Gnome Customization
+    gnome.gnome-tweaks gnome.dconf-editor
+    gnomeExtensions.openweather gnomeExtensions.user-themes
+    # Theming
+    orchis moka-icon-theme capitaine-cursors
+    # Graphics Card
     nvidia-offload
-    edit-configuration
-    rpi-imager
-    zoom-us
-    starship
-    pciutils
-    gnome.gnome-tweaks
-    gnomeExtensions.openweather
-    gnomeExtensions.user-themes
-    xorg.libXxf86vm
-    orchis
-    moka-icon-theme
-    capitaine-cursors
   ];
 
   # List services that you want to enable:
