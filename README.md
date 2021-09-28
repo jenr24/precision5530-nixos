@@ -1,4 +1,6 @@
-# NixOS configuration for my Dell Precision 5530
+# precision5530-nixos
+
+NixOS configuration for my Dell Precision 5530
 
 ## Nix Configuration
 * Automatic garbage collection enabled every day at 8:00am
